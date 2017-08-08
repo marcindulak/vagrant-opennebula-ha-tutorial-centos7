@@ -1,0 +1,118 @@
+# Following frontend installation instructions from
+# http://docs.opennebula.org/5.4/deployment/opennebula_installation/frontend_installation.html
+
+- hosts: one
+  strategy: linear
+  serial:   3
+  become:   yes
+  vars:
+
+  pre_tasks:
+    - name: Step 1. Disable SElinux
+      selinux:
+        policy: targeted
+        state:  permissive
+
+    - name: Step 2. Add OpenNebula Repositories
+      yum_repository:
+        baseurl:     "https://downloads.opennebula.org/repo/{{ opennebula_version }}/CentOS/$releasever/$basearch"
+        description: opennebula
+        enabled:     yes
+        gpgcheck:    yes
+        gpgkey:      https://downloads.opennebula.org/repo/repo.key
+        name:        opennebula
+        state:       present
+
+    - name: Step 3. Installing the Software
+      yum:
+        name:  "{{ item }}"
+        state: present
+      with_items:
+        - opennebula-server
+        - opennebula-sunstone
+        - opennebula-ruby
+        - opennebula-java
+        - opennebula-gate
+        - opennebula-flow
+
+    - name: Install expect for unattended running of /usr/share/one/install_gems
+      yum:
+        name:  expect
+        state: present        
+
+    - name: Obtain the status of /root/install_gems
+      stat:
+        path: /root/install_gems
+      register: root_install_gems
+
+    - name: Create expect file for unattended running of /usr/share/one/install_gems on RHEL
+      blockinfile:
+        path:   /root/install_gems
+        block:  |
+          #!/usr/bin/expect --
+          spawn /bin/ruby /usr/share/one/install_gems
+          expect "1. CentOS/RedHat/Scientific"
+          send "1\r"
+          expect "Press enter to continue..."
+          send "\r"
+          expect "Is this ok \\\[y/d/N\\\]:"
+          send "y\r"
+          expect "Press enter to continue..."
+          send "\r"
+          set timeout -1
+          expect "Abort."
+          puts "Ended expect script."
+        create: yes
+        state:  present
+        marker: "# {mark} CREATED BY ANSIBLE"
+      when: root_install_gems.stat.exists == False
+      become_user: root
+
+    - name: Step 4. Ruby Runtime Installation
+      shell:  expect /root/install_gems&& touch /root/install_gems.done
+      args:
+        creates: /root/install_gems.done
+
+  roles:
+
+  tasks:
+    - name: Change oneadmin password
+      shell: "echo 'oneadmin:{{ oneadmin_password }}' > /var/lib/one/.one/one_auth&& touch /var/lib/one/.one/one_auth.done"
+      args:
+        creates: /var/lib/one/.one/one_auth.done
+      become_user: oneadmin
+
+    - name: Step 6. Starting OpenNebula
+      service:
+        name:     "{{ item }}"
+        state:    started
+        enabled:  true
+      with_items:
+        - opennebula
+        - opennebula-sunstone
+
+    - name: Wait for opennebula sunstone to start
+      wait_for:
+        port:    9869
+        delay:   3
+        timeout: 5
+
+  post_tasks:
+    - name: Step 7. Verifying the Installation - Linux CLI
+      shell:       oneuser show
+      become:      yes
+      become_user: oneadmin
+      register:    linux_cli
+      until:       "'USER 0 INFORMATION' in linux_cli.stdout"
+      retries:     5
+      delay:       1
+
+    - name: Step 7. Verifying the Installation - Sunstone
+      get_url:
+        url:              "http://{{ ansible_hostname }}:9869"
+        url_password:     "{{ oneadmin_password }}"
+        url_username:     oneadmin
+        dest:             /dev/null
+        force_basic_auth: yes
+      become:      yes
+      become_user: oneadmin

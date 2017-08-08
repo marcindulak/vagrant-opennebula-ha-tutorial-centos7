@@ -1,0 +1,88 @@
+- hosts: one
+  strategy: linear
+  serial:   3
+  become:   yes
+  vars:
+
+  pre_tasks:
+    - name: create filesystem on the block device used for glusterfs
+      filesystem:
+        fstype: xfs
+        dev:    "{{ gluster_block_device }}"
+
+    - name: create the brick directory
+      file:
+        path: "/data/glusterfs/{{ gluster_volume_name }}/brick1"
+        state: directory
+        mode: 0755
+
+    - name: mount the brick directory
+      mount:
+        fstype: xfs
+        path:   "/data/glusterfs/{{ gluster_volume_name }}/brick1"
+        src:    "{{ gluster_block_device }}"
+        state:  mounted
+
+    - name: add glusterfs nodes to /etc/hosts
+      lineinfile:
+        dest:   /etc/hosts
+        regexp: ".*glusterfs-{{ item }}$"
+        line:   "{{ hostvars[item]['ansible_'+gluster_interface_name]['ipv4']['address'] }} glusterfs-{{ item }}"
+        state:  present
+      when: hostvars[item]['ansible_'+gluster_interface_name]['ipv4']['address'] is defined
+      with_items: "{{ groups['one'] }}"
+
+    - name: install centos-release-gluster package
+      package:
+        name:  centos-release-gluster310
+        state: present
+
+    - name: install glusterfs-server package
+      package:
+        name:  glusterfs-server
+        state: present
+
+    - name: start and enable glusterd service
+      service:
+        name:    glusterd
+        state:   started
+        enabled: true
+
+    - name: pause to allow glusterd service to write its conf files
+      pause:
+        seconds: 3
+
+  roles:
+
+  tasks:
+    # https://gluster.readthedocs.io/en/latest/Administrator%20Guide/Brick%20Naming%20Conventions/
+    - name: create glusterfs volume
+      gluster_volume:
+        state:    present
+        name:     "{{ gluster_volume_name }}"
+        bricks:   "/data/glusterfs/{{ gluster_volume_name }}/brick1/brick"
+        replicas: "{{ groups['one'] | length }}"
+        cluster:  "{{ groups['one'] | join(',') | regex_replace('one', 'glusterfs-one') }}"  # add glusterfs prefix on gluster network
+      run_once:    true
+
+  post_tasks:
+    - name: create opennebula datastore mount point /var/lib/one/datastores - opennebula seems to ignore anything other than /var/lib/one/datastores
+      file:
+        path: "/var/lib/one/datastores"
+        state: directory
+        mode:  0755
+
+#    - name: "restrict access to the glusterfs volume {{ gluster_volume_name }} to the clients: hostname, fqdn, gluster-fqdn"
+#      command: "gluster volume set {{ gluster_volume_name }} auth.allow ,{{ groups['one'] | join(',') | regex_replace('\\.mydomain', '') }},{{ groups['one'] | join(',') }},{{ groups['one'] | join(',') | regex_replace('one', 'glusterfs-one') }}"
+#      run_once: true
+
+    - name: mount the "{{ gluster_volume_name }}" opennebula datastore
+      mount:
+        fstype: glusterfs
+        # -obackup-volfile-servers=<server2>:       <server3>
+        opts:   "defaults,_netdev,backupvolfile-server={{ groups['one'][1:] | join(':') | regex_replace('one', 'glusterfs-one') }}"
+        path:   "/var/lib/one/datastores"
+        src:    "{{ groups['one'] | first | regex_replace('one', 'glusterfs-one') }}:/{{ gluster_volume_name }}"
+        state:  mounted
+
+

@@ -1,0 +1,4 @@
+---
+apache_package_name:        httpd
+apache_backend_server_host: localhost
+apache_backend_server_port: 8080

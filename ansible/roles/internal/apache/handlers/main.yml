@@ -1,0 +1,9 @@
+---
+- name: "restart apache service"
+  become: yes
+  systemd:
+    name:          "{{ apache_package_name }}"
+    enabled:       yes
+    daemon-reload: yes
+    state:         restarted
+

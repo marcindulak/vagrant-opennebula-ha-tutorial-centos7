@@ -1,0 +1,30 @@
+---
+- name: install apache package
+  become: yes
+  package:
+    name:  "{{ apache_package_name }}"
+    state: present
+
+- name: deploy reverse_proxy.conf file
+  become: yes
+  template:
+    src:  reverse_proxy.conf.j2
+    dest: "/etc/httpd/conf.d/reverse_proxy.conf"
+  notify:
+    - "restart apache service"
+
+- name: SELinux allow reverse proxy
+  become: yes
+  seboolean:
+    name:       httpd_can_network_connect
+    state:      yes
+    persistent: yes
+
+- name: start and enable apache service
+  become: yes
+  service:
+    name:    "{{ apache_package_name }}"
+    state:   started
+    enabled: true
+  notify:
+    - "restart apache service"

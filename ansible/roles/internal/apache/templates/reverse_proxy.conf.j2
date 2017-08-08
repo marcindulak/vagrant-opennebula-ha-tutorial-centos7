@@ -1,0 +1,11 @@
+<VirtualHost *:80>
+  ServerName {{ inventory_hostname }}
+  
+  CustomLog /var/log/httpd/{{ inventory_hostname }}-access_log combined
+  ErrorLog /var/log/httpd/{{ inventory_hostname }}-error_log
+
+  <Location />
+    ProxyPass http://{{ apache_backend_server_host }}:{{ apache_backend_server_port }}/
+    ProxyPassReverse http://{{ apache_backend_server_host }}:{{ apache_backend_server_port }}/
+  </Location>
+</VirtualHost>

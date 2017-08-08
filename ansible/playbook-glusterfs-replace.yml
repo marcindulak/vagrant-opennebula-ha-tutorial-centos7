@@ -1,0 +1,158 @@
+# https://support.rackspace.com/how-to/recover-from-a-failed-server-in-a-glusterfs-array/
+
+- hosts: one
+  strategy: linear
+  serial:   3
+  become:   yes
+  vars:
+
+  pre_tasks:
+    - name: create filesystem on the block device used for glusterfs
+      when: inventory_hostname == gluster_replace_node
+      filesystem:
+        fstype: xfs
+        dev:    "{{ gluster_block_device }}"
+
+    - name: create the brick directory
+      when: inventory_hostname == gluster_replace_node
+      file:
+        path: "/data/glusterfs/{{ gluster_volume_name }}/brick1"
+        state: directory
+        mode: 0755
+
+    - name: mount the brick directory
+      when: inventory_hostname == gluster_replace_node
+      mount:
+        fstype: xfs
+        path:   "/data/glusterfs/{{ gluster_volume_name }}/brick1"
+        src:    "{{ gluster_block_device }}"
+        state:  mounted
+
+    - name: add glusterfs nodes to /etc/hosts
+      lineinfile:
+        dest:   /etc/hosts
+        regexp: ".*glusterfs-{{ item }}$"
+        line:   "{{ hostvars[item]['ansible_'+gluster_interface_name]['ipv4']['address'] }} glusterfs-{{ item }}"
+        state:  present
+      when: inventory_hostname == gluster_replace_node and hostvars[item]['ansible_'+gluster_interface_name]['ipv4']['address'] is defined
+      with_items: "{{ groups['one'] }}"
+
+    - name: install centos-release-gluster package
+      when: inventory_hostname == gluster_replace_node
+      package:
+        name:  centos-release-gluster310
+        state: present
+
+    - name: install glusterfs-server package
+      when: inventory_hostname == gluster_replace_node
+      package:
+        name:  glusterfs-server
+        state: present
+
+    - name: start and enable glusterd service
+      when: inventory_hostname == gluster_replace_node
+      service:
+        name:    glusterd
+        state:   started
+        enabled: true
+
+    - name: pause to allow glusterd service to write its conf files
+      pause:
+        seconds: 3
+
+  roles:
+
+  tasks:
+    - name: get the original peer UUID of the server to be replaced
+      when: inventory_hostname == gluster_server_node
+      shell:    "grep glusterfs-{{ gluster_replace_node }} -r /var/lib/glusterd/peers | cut -d'/' -f6 | cut -d: -f1"
+      register: get_gluster_replace_uuid
+
+    - name: "set fact the original peer UUID {{ gluster_replace_uuid }} of the server to be replaced"
+      when: inventory_hostname == gluster_server_node
+      set_fact:
+        fact_gluster_replace_uuid: "{{ get_gluster_replace_uuid.stdout }}"
+      failed_when: get_gluster_replace_uuid.stdout != gluster_replace_uuid
+
+    - name: stop glusterd service
+      when: inventory_hostname == gluster_replace_node
+      service:
+        name:    glusterd
+        state:   stopped
+
+    - name: replace the automatically generated node UUID with the original one
+      when: inventory_hostname == gluster_replace_node
+      lineinfile:
+        path:   /var/lib/glusterd/glusterd.info
+        regexp: 'UUID=.*'
+        line:   "UUID={{ gluster_replace_uuid }}"
+
+  post_tasks:
+    - name: create opennebula datastore mount point /var/lib/one/datastores - opennebula seems to ignore anything other than /var/lib/one/datastores
+      when: inventory_hostname == gluster_replace_node
+      file:
+        path: "/var/lib/one/datastores"
+        state: directory
+        mode:  0755
+
+    - name: start glusterd service
+      when: inventory_hostname == gluster_replace_node
+      service:
+        name:    glusterd
+        state:   started
+
+    - name: explicitly add peers
+      shell:      "gluster peer probe glusterfs-{{ item }}"
+      register:    gluster_peer_probe
+      failed_when: "'success' not in gluster_peer_probe.stdout or gluster_peer_probe.rc != 0"
+      with_items: "{{ groups['one'] }}" 
+
+    - name: restart glusterd service
+      when: inventory_hostname == gluster_replace_node
+      service:
+        name:    glusterd
+        state:   restarted
+
+    - name: "get volumes from a peer server"
+      when: inventory_hostname == gluster_replace_node
+      shell: "echo y | gluster volume sync glusterfs-{{ gluster_server_node }} all"
+
+    - name: "get the original volume ID of {{ gluster_volume_name }}"
+      when: inventory_hostname == gluster_server_node
+      shell:    "getfattr -n trusted.glusterfs.volume-id /data/glusterfs/{{ gluster_volume_name }}/brick1/brick 2>/dev/null | grep volume-id | cut -d= -f2-"
+      register: get_gluster_volume_id
+
+    - name: "set fact the original volume ID {{ gluster_volume_id }} of {{ gluster_volume_name }} on the server to be replaced"
+      when: inventory_hostname == gluster_server_node
+      set_fact:
+        fact_gluster_volume_id: "{{ get_gluster_volume_id.stdout }}"
+      failed_when: get_gluster_volume_id.stdout != gluster_volume_id
+
+    - name: "set the original volume ID of {{ gluster_volume_name }} on the server to be replaced"
+      when: inventory_hostname == gluster_replace_node
+      shell: "setfattr -n trusted.glusterfs.volume-id -v '{{ gluster_volume_id }}' /data/glusterfs/{{ gluster_volume_name }}/brick1/brick"
+
+    - name: restart glusterd service
+      when: inventory_hostname == gluster_replace_node
+      service:
+        name:    glusterd
+        state:   restarted
+
+    - name: heal the volume on the server to be replaced
+      when: inventory_hostname == gluster_replace_node
+      shell: "gluster volume heal {{ gluster_volume_name }} full"
+
+    - name: get the volume heal info on the server to be replaced
+      when: inventory_hostname == gluster_replace_node
+      shell: "gluster volume heal {{ gluster_volume_name }} info"
+
+    - name: mount the "{{ gluster_volume_name }}" opennebula datastore
+      when: inventory_hostname == gluster_replace_node
+      mount:
+        fstype: glusterfs
+        # -obackup-volfile-servers=<server2>:       <server3>
+        opts:   "defaults,_netdev,backupvolfile-server={{ groups['one'][1:] | join(':') | regex_replace('one', 'glusterfs-one') }}"
+        path:   "/var/lib/one/datastores"
+        src:    "{{ groups['one'] | first | regex_replace('one', 'glusterfs-one') }}:/{{ gluster_volume_name }}"
+        state:  mounted
+

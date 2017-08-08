@@ -1,0 +1,131 @@
+# Following node installation instructions from
+# https://docs.opennebula.org/5.4/advanced_components/ha/frontend_ha_setup.html
+
+- hosts:  one
+  strategy: linear
+  serial:   3
+  become:   yes
+  vars:
+
+  tasks:
+    - name: Configuration of the initial leader - Leader - Start OpenNebula
+      when: inventory_hostname == opennebula_ha_leader
+      service:
+        name:     "{{ item }}"
+        state:    started
+        enabled:  true
+      with_items:
+        - opennebula
+
+    - name: Configuration of the initial leader - Leader - initial check of the zone
+      when: inventory_hostname == opennebula_ha_leader
+      command:     "onezone show 0"
+      become:      yes
+      become_user: oneadmin
+      register:    onezone_show_0_check_initial
+
+    - name: Configuration of the initial leader - Leader - Add the server itself to the zone
+      when: inventory_hostname == opennebula_ha_leader and opennebula_ha_leader not in onezone_show_0_check_initial.stdout
+      command:     "onezone server-add 0 --name {{ opennebula_ha_leader }} --rpc http://{{ hostvars[inventory_hostname]['ansible_'+opennebula_ha_interface_name]['ipv4']['address'] }}:2633/RPC2"
+      become:      yes
+      become_user: oneadmin
+
+    - name: Configuration of the initial leader - Leader - check the zone for solo
+      when: inventory_hostname == opennebula_ha_leader and opennebula_ha_leader not in onezone_show_0_check_initial.stdout
+      command:     "onezone show 0"
+      become:      yes
+      become_user: oneadmin
+      register:    onezone_show_0_check_solo
+      failed_when: "'solo' not in onezone_show_0_check_solo.stdout or onezone_show_0_check_solo.rc != 0"
+
+    - name: Configuration of the initial leader - Leader - Stop OpenNebula service
+      when: inventory_hostname == opennebula_ha_leader
+      service:
+        name:     "{{ item }}"
+        state:    stopped
+        enabled:  true
+      with_items:
+        - opennebula
+
+    - name: Configuration of the initial leader - Leader - fsck DB backup
+      when: inventory_hostname == opennebula_ha_leader
+      command:     "onedb fsck -v --sqlite /var/lib/one/one.db"
+      become:      yes
+      become_user: oneadmin
+
+    - name: Configuration of the initial leader - Leader - update SERVER_ID in /etc/one/oned.conf
+      # sed -E 's/^(\s+)SERVER_ID(\s+)=(\s+)-1,/\1SERVER_ID\2=\30,  # MODIFIED BY ANSIBLE/' oned.conf
+      when: inventory_hostname == opennebula_ha_leader
+      lineinfile:
+        path:   /etc/one/oned.conf
+        regexp: '^(\s+)SERVER_ID(\s+)=(\s+)-1,'
+        line:   "SERVER_ID = {{ groups['one'].index(inventory_hostname) }},  # MODIFIED BY ANSIBLE"
+
+    - name: Configuration of the initial leader - Leader - Enable the RAFT Hooks in /etc/one/oned.conf - RAFT_LEADER_HOOK
+      when: inventory_hostname == opennebula_ha_leader
+      blockinfile:
+        path:        /etc/one/oned.conf
+        block:       |
+          RAFT_LEADER_HOOK = [
+               COMMAND = "raft/vip.sh",
+               ARGUMENTS = "leader {{ opennebula_ha_interface_name }} {{ opennebula_ha_floating_ip }}/{{ opennebula_ha_floating_ip_cidr }}"
+          ]
+        insertafter: "Executed when a server transits from follower->leader"
+        state:       present
+        marker:      "# {mark} RAFT_LEADER_HOOK CREATED BY ANSIBLE"
+
+    - name: Configuration of the initial leader - Leader - Enable the RAFT Hooks in /etc/one/oned.conf - RAFT_FOLLOWER_HOOK
+      when: inventory_hostname == opennebula_ha_leader
+      blockinfile:
+        path:        /etc/one/oned.conf
+        block:       |
+          RAFT_FOLLOWER_HOOK = [
+               COMMAND = "raft/follower.sh",
+               ARGUMENTS = "follower {{ opennebula_ha_interface_name }} {{ opennebula_ha_floating_ip }}/{{ opennebula_ha_floating_ip_cidr }}"
+          ]
+        insertafter: "Executed when a server transits from leader->follower"
+        state:       present
+        marker:      "# {mark} RAFT_FOLLOWER_HOOK CREATED BY ANSIBLE"
+
+    - name: Configuration of the initial leader - Leader - Start OpenNebula
+      when: inventory_hostname == opennebula_ha_leader
+      service:
+        name:     "{{ item }}"
+        state:    started
+        enabled:  true
+      with_items:
+        - opennebula
+
+    - name: Configuration of the initial leader - Leader - check the floating IP
+      when: inventory_hostname == opennebula_ha_leader
+      uri:
+        url:         "http://{{ opennebula_ha_floating_ip }}:2633/RPC2"
+        status_code: 405
+        retries:     10
+        delay:       1 
+      register: check_floating_IP
+      until: check_floating_IP.status == 405
+
+#    - name: Configuration of the initial leader - Leader - check the floating IP
+#      wait_for:
+#        host:    "{{ opennebula_ha_floating_ip }}"
+#        port:    2633
+#        timeout: 5
+#      when: inventory_hostname == opennebula_ha_leader
+
+    - name: Configuration of the initial leader - Leader - check the zone for leader
+      when: inventory_hostname == opennebula_ha_leader
+      command:     "onezone show 0"
+      become:      yes
+      become_user: oneadmin
+      register:    onezone_show_0_check_leader
+      failed_when: "'leader' not in onezone_show_0_check_leader.stdout or onezone_show_0_check_leader.rc != 0"
+
+    - name: Adding more servers - Leader - Create a DB backup in the initial leader
+      when: inventory_hostname == opennebula_ha_leader
+      command:     "onedb backup --sqlite /var/lib/one/one.db /tmp/my_backup.db"
+      args:
+        creates: /tmp/my_backup.db
+      become:      yes
+      become_user: oneadmin
+

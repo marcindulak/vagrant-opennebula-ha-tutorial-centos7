@@ -1,0 +1,3 @@
+- include: playbook-glusterfs-setup.yml
+- include: playbook-one-frontend-setup.yml
+- include: playbook-one-node-setup.yml
