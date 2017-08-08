@@ -4,7 +4,7 @@ Description
 
 An example of a highly-available, hyper-converged `opennebula` setup https://docs.opennebula.org/5.4/advanced_components/ha/.
 The setup provides high-availability of the `opennebula`/`gluster` `nodes` and live migration of the virtual machines.
-Each `node` is an all-in-one `opennebula` `frontend`/`node`, with `glusterfs` shared datastore across the zones.
+Each `node` is an all-in-one `opennebula` `frontend`/`node`, with `glusterfs` shared datastore across the `nodes`.
 For simplicity, each `gluster` `node` contains a single `brick`, and the number of `gluster` replicas equals the number of `opennebula`/`gluster` `nodes`.
 
 `vagrant` is used to provide the infrastructure (OS installation and networking setup), and `ansible` playbooks
