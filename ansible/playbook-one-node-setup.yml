@@ -55,7 +55,7 @@
       become_user: oneadmin
       run_once: true
 
-    - name: Step 4. Configure Passwordless SSH - fetch public key
+    - name: Step 4. Configure Passwordless SSH - fetch public key - always run (non-idempotent)
       shell:    cat /var/lib/one/.ssh/id_rsa.pub
       register: ssh_public_key
 
@@ -68,7 +68,7 @@
         - "{{ ssh_public_key.stdout }}"
         - "{{ groups['one'] }}"
 
-    - name: Make the initial ssh connection with StrictHostKeyChecking=no to accept public host key
+    - name: Make the initial ssh connection with StrictHostKeyChecking=no to accept public host key - always run (non-idempotent)
       command:     "ssh -o StrictHostKeyChecking=no oneadmin@{{ item[0] }} hostname"
       become:      yes
       become_user: oneadmin

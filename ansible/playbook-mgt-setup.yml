@@ -1,0 +1,7 @@
+- hosts: mgt
+  vars:
+  roles:
+#    - role: internal/prometheus
+    - role: internal/node_exporter
+    - role: internal/apache
+

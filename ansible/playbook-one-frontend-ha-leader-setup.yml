@@ -22,16 +22,16 @@
       command:     "onezone show 0"
       become:      yes
       become_user: oneadmin
-      register:    onezone_show_0_check_initial
+      register:    onezone_show_0_check_initial_leader
 
     - name: Configuration of the initial leader - Leader - Add the server itself to the zone
-      when: inventory_hostname == opennebula_ha_leader and opennebula_ha_leader not in onezone_show_0_check_initial.stdout
+      when: inventory_hostname == opennebula_ha_leader and opennebula_ha_leader not in onezone_show_0_check_initial_leader.stdout
       command:     "onezone server-add 0 --name {{ opennebula_ha_leader }} --rpc http://{{ hostvars[inventory_hostname]['ansible_'+opennebula_ha_interface_name]['ipv4']['address'] }}:2633/RPC2"
       become:      yes
       become_user: oneadmin
 
     - name: Configuration of the initial leader - Leader - check the zone for solo
-      when: inventory_hostname == opennebula_ha_leader and opennebula_ha_leader not in onezone_show_0_check_initial.stdout
+      when: inventory_hostname == opennebula_ha_leader and opennebula_ha_leader not in onezone_show_0_check_initial_leader.stdout
       command:     "onezone show 0"
       become:      yes
       become_user: oneadmin
@@ -96,7 +96,7 @@
       with_items:
         - opennebula
 
-    - name: Configuration of the initial leader - Leader - check the floating IP
+    - name: Configuration of the initial leader - Leader - check the floating IP - always run (non-idempotent)
       when: inventory_hostname == opennebula_ha_leader
       uri:
         url:         "http://{{ opennebula_ha_floating_ip }}:2633/RPC2"
@@ -106,12 +106,11 @@
       register: check_floating_IP
       until: check_floating_IP.status == 405
 
-#    - name: Configuration of the initial leader - Leader - check the floating IP
-#      wait_for:
-#        host:    "{{ opennebula_ha_floating_ip }}"
-#        port:    2633
-#        timeout: 5
-#      when: inventory_hostname == opennebula_ha_leader
+    - name: Configuration of the initial leader - Leader - check the floating IP
+      wait_for:
+        host:    "{{ opennebula_ha_floating_ip }}"
+        port:    2633
+        timeout: 5
 
     - name: Configuration of the initial leader - Leader - check the zone for leader
       when: inventory_hostname == opennebula_ha_leader

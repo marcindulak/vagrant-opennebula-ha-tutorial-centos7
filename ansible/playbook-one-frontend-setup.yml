@@ -98,7 +98,7 @@
         timeout: 5
 
   post_tasks:
-    - name: Step 7. Verifying the Installation - Linux CLI
+    - name: Step 7. Verifying the Installation - Linux CLI - always run (non-idempotent)
       shell:       oneuser show
       become:      yes
       become_user: oneadmin

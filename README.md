@@ -28,7 +28,7 @@ Configuration overview
 
 The `opennebula` bridge br1 is associated with eth1 interface. The eth2 interface is used for `glusterfs` communication.
 The `opennebula`\`s web-interface `sunstone` is available on the the Virtual IP provided by Raft.
-This Virtual IP is then used as the backend for an `apache` reverse proxy running on the management server port 80.
+This Virtual IP sunstone port 9869 is then used as the backend for an `apache` reverse proxy running on the management server port 80.
 `vagrant` port forwarding feature is used to expose the `apache` port 80 on the management server to the `vagrant` host port 10080.
 
 
@@ -113,37 +113,42 @@ Install the required `vagrant` plugins and bring up the VMs:
 
 After the VMs are up, `ansible` playbooks are used to configure `gluster` and `opennebula`. Due to common failures when downloading software from the internet, the playbooks will need to be executed until no errors are printed.
 
-1. configure replicated `gluster` volume with count 3, used as the shared storage for `opennebula`
+- configure the management node: setup apache reverse-proxy for the sunstone interface, and configure prometheus:
+
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-mgt-setup.yml" || :
+
+- configure replicated `gluster` volume with count 3, used as the shared storage for `opennebula`
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-glusterfs-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-glusterfs-setup.yml" || :
 
-2. configure 3 independent `openenbula` frontends. They will later used to form the highly-available (HA) cluster.
+- configure 3 independent `openenbula` frontends. They will later used to form the highly-available (HA) cluster.
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-setup.yml" || :
 
-3. on each node configure the `opennebula` `node`:
+- configure the 3 `opennebula` `nodes` (on the same servers as frontends):
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-node-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-node-setup.yml" || :
 
-4. configure HA frontend leader:
+- configure HA frontend leader:
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-leader-setup.yml --extra-vars 'opennebula_ha_leader=one1.mydomain'" || :
 
-5. configure the HA frontend followers:
+- configure the HA frontend followers:
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-follower-setup.yml --extra-vars 'opennebula_ha_follower=one2.mydomain'" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-follower-setup.yml --extra-vars 'opennebula_ha_follower=one3.mydomain'" || :
 
-The recent documentation of `opennebula` http://docs.opennebula.org/5.4/operation/ focuses on actions performed using the sunstone web-interface. sunstone port forwared by `vagrant` from the guest one1.myadmin:9869 (the current frontend leader) to the `vagrant` host port 19869 is accessible with credentials (defined in Vagrantfile) `onadmin`/`password`:
+The recent documentation of `opennebula` http://docs.opennebula.org/5.4/operation/ focuses on actions performed using the sunstone web-interface. sunstone port forwared by `vagrant` from the guest one1.myadmin:9869 (the current frontend leader) to the `vagrant` host port 19869, or on `apache` reverse-proxy at port 10080, is accessible with credentials (defined in Vagrantfile) `onadmin`/`password`:
 
         $ firefox 127.0.0.1:19869
+        $ firefox 127.0.0.1:10080
 
 The older `opennebula` documentation http://docs.opennebula.org/4.14/design_and_installation/quick_starts/qs_centos7_kvm.html contains instructions how to start a VMs on the command line. All steps are to be performed on the frontend leader (currently one1.mydomain), and will be replicated over to `sqlite` instances on the frontend followers.
 
-- add the `opennebula` worker `nodes` to the cluster:
+- add the `opennebula` `nodes` to the cluster:
 
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onehost create one1.mydomain -i kvm -v kvm && onehost create one2.mydomain -i kvm -v kvm && onehost create one3.mydomain -i kvm -v kvm'"
         $ sleep 10
@@ -222,9 +227,10 @@ and `opennebula` HA algorithm should join the one1.mydomain `node` as the second
         $ vagrant suspend one1.mydomain
         $ vagrant ssh one2.mydomain -c "sudo su - oneadmin -c 'onezone show 0'"  # this will block until RAFT achieves consensus
 
-At that point sunstone should be available from the current frontend leader (`X`) port 9869, forwared by `vagrant` as `X`9869 on the `vagrant` host:
+At that point sunstone should be available from the current frontend leader (`X`) port 9869, forwared by `vagrant` as `X`9869 on the `vagrant` host, or through `apache` reverse-proxy:
 
         $ firefox 127.0.0.1:X9869
+        $ firefox 127.0.0.1:10080
 
 Let's migrate the VM back to one3.mydomain. The migration is initiated from the current leader, but using CLI it can be also performed from the follower:
 
@@ -233,17 +239,18 @@ Let's migrate the VM back to one3.mydomain. The migration is initiated from the 
         $ sleep 10
         $ vagrant ssh $CURRENT_LEADER -c "sudo su - oneadmin -c 'onevm list | grep one3'"
 
-After bringing back one1.mydomain verify `gluster` synchonizes the volume (prometheus MDTMP) and RAFT sets the `node` as a follower:
+After bringing back one1.mydomain verify `gluster` synchonizes the volume (TODO: prometheus) and RAFT sets the `node` as a follower:
 
         $ vagrant reload one1.mydomain
         $ vagrant ssh $CURRENT_LEADER -c "sudo su - oneadmin -c 'onezone show 0'"
+        $ vagrant ssh $CURRENT_LEADER -c "sudo su - oneadmin -c 'onehost list'"
 
-Now let's simulate the case when the `node` which runs the centos7 VM, crashes, (automaticaly migrate the VM MDTMP) and the OS needs to be reinstalled (or a similar case of a server hardware update):
+Now let's simulate the case when the `node` which runs the centos7 VM, crashes, (TODO: automaticaly migrate the VM) and the OS needs to be reinstalled (or a similar case of a server hardware update):
 
         $ vagrant destroy -f one3.mydomain
         $ sleep 180  # changing XMLRPC_TIMEOUT_MS may help to achive consensus faster, see https://forum.opennebula.org/t/frontend-ha-raft-problems/4702/22
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onezone show 0'"
-        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list | grep one3'"  # onevm shows incorrectly that the VM is still running
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list | grep one3 | grep unkn'"
 
 Bring up the crashed `node`, and clear its old ssh server keys:
 
@@ -255,22 +262,25 @@ Bring up the crashed `node`, and clear its old ssh server keys:
 
 Restore the `gluster` volume on the new `node`, using the information present on the running peer:
 
-        $ UUID=`vagrant ssh one1.mydomain -c "sudo su - -c 'grep glusterfs-one3.mydomain -r /var/lib/glusterd/peers | cut -d: -f1 | cut -d/ -f6'"`
-        $ VOLUME_ID=`vagrant ssh one1.mydomain -c "sudo su - -c 'getfattr -n trusted.glusterfs.volume-id /data/glusterfs/datastore1/brick1/brick 2>/dev/null | grep volume-id | cut -d= -f2-'"`
+        $ UUID=`vagrant ssh one1.mydomain -c "sudo su - -c 'grep glusterfs-one3.mydomain -r /var/lib/glusterd/peers | cut -d: -f1 | cut -d/ -f6'" | tr -d ' '`
+        $ VOLUME_ID=`vagrant ssh one1.mydomain -c "sudo su - -c 'getfattr -n trusted.glusterfs.volume-id /data/glusterfs/datastore1/brick1/brick 2>/dev/null | grep volume-id | cut -d= -f2-'" | tr -d ' '`
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-glusterfs-replace.yml --extra-vars 'gluster_server_node=one1.mydomain gluster_replace_node=one3.mydomain gluster_replace_uuid=$UUID gluster_volume_id=$VOLUME_ID'" || :
 
-Verify `gluster` has synchonized the data to the brick on the new `node`:
-
-        $ vagrant ssh one3.mydomain -c "df -h /data/glusterfs/datastore1/brick1'"
-
-and configure `opennebula` frontend and `node` on the new server:
+Configure `opennebula` frontend and `node` on the new server:
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-node-setup.yml" || :
 
+Delete and add the new `node` as frontend follower:
+
+        $ CURRENT_LEADER=`vagrant ssh one2.mydomain -c "sudo su - oneadmin -c 'onezone show 0'" | grep leader | awk '{print $2}'`
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onezone server-del 0 2'"
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-follower-setup.yml --extra-vars 'opennebula_ha_leader=$CURRENT_LEADER opennebula_ha_follower=one3.mydomain'"
+
 At that point there should be one leader and two followers, and the centos7 VM instance in the poweroff state:
 
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onezone show 0'"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onehost list'"
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list | grep one3 | grep poff'"
 
 Resume the centos7 VM instance and verify it is accesible:

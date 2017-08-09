@@ -1,0 +1,12 @@
+[
+    {
+        "labels": {
+            "job": "{{ prometheus_application_name }}"
+        }, 
+        "targets": [
+            {% for host in groups['app'] | sort %}
+            "{{ hostvars[host].inventory_hostname }}:{{ prometheus_application_port }}"{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ]
+    }
+]

@@ -1,0 +1,23 @@
+---
+# https://github.com/lest/prometheus-rpm
+- name: configure prometheus yum repo
+  become: yes
+  # curl to bash: a really bad practice https://news.ycombinator.com/item?id=6650987
+  shell: curl -s https://packagecloud.io/install/repositories/prometheus-rpm/release/script.rpm.sh | bash
+  args:
+    creates: "/etc/yum.repos.d/prometheus-rpm_release.repo" 
+
+- name: install node_exporter package
+  become: yes
+  package:
+    name:  "{{ node_exporter_package_name }}"
+    state: present
+
+- name: start and enable node_exporter service
+  become: yes
+  service:
+    name:    "{{ node_exporter_package_name }}"
+    state:   started
+    enabled: true
+  notify:
+    - "restart node_exporter service"

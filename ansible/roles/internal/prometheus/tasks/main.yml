@@ -1,0 +1,45 @@
+---
+# https://github.com/lest/prometheus-rpm
+- name: configure prometheus yum repo
+  become: yes
+  # curl to bash: a really bad practice https://news.ycombinator.com/item?id=6650987
+  shell: curl -s https://packagecloud.io/install/repositories/prometheus-rpm/release/script.rpm.sh | bash
+  args:
+    creates: "/etc/yum.repos.d/prometheus-rpm_release.repo" 
+
+- name: install prometheus package
+  become: yes
+  package:
+    name:  "{{ prometheus_package_name }}"
+    state: present
+
+- name: deploy prometheus.yml file
+  become: yes
+  template:
+    src:  prometheus.yml.j2
+    dest: "/etc/prometheus/prometheus.yml"
+  notify:
+    - "restart prometheus service"
+
+# https://www.robustperception.io/using-json-file-service-discovery-with-prometheus/
+- name: deploy app.json file
+  become: yes
+  template:
+    src:  app.json.j2
+    dest: "/etc/prometheus/{{ prometheus_application_name }}.json"
+
+# https://www.robustperception.io/using-json-file-service-discovery-with-prometheus/
+- name: deploy node_exporter.json file
+  become: yes
+  template:
+    src:  node_exporter.json.j2
+    dest: "/etc/prometheus/node_exporter.json"
+
+- name: start and enable prometheus service
+  become: yes
+  service:
+    name:    "{{ prometheus_package_name }}"
+    state:   started
+    enabled: true
+  notify:
+    - "restart prometheus service"

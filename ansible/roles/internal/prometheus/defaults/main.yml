@@ -1,0 +1,4 @@
+---
+prometheus_package_name:     prometheus
+prometheus_application_name: app
+prometheus_application_port: 8080

@@ -13,6 +13,12 @@
   notify:
     - "restart apache service"
 
+- name: install libsemanage-python package
+  become: yes
+  package:
+    name:  libsemanage-python
+    state: present
+
 - name: SELinux allow reverse proxy
   become: yes
   seboolean:

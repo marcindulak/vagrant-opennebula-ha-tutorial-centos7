@@ -1,0 +1,12 @@
+[
+   {
+        "labels": {
+            "job": "node_exporter"
+        }, 
+        "targets": [
+            {% for host in groups['all'] | sort %}
+            "{{ hostvars[host].inventory_hostname }}:9100"{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ]
+    }
+]

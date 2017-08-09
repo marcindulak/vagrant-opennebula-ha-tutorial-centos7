@@ -1,0 +1,8 @@
+---
+- name: "restart node_exporter service"
+  become: yes
+  systemd:
+    name:          "{{ node_exporter_package_name }}"
+    enabled:       yes
+    daemon-reload: yes
+    state:         restarted

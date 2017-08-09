@@ -50,6 +50,7 @@
       with_items:
         - opennebula
 
+#    # https://forum.opennebula.org/t/onedb-restore-sqlite-command-restore-requires-one-parameter-to-run/4632/1
 #    - name: Adding more servers - Follower - Restore the database backup
 #      when: inventory_hostname == opennebula_ha_follower
 #      command:     "onedb restore -v --dbname opennebula --sqlite /tmp/my_backup.db"
@@ -62,8 +63,15 @@
       become:      yes
       become_user: oneadmin
 
-    - name: Adding more servers - Leader - Add the server itself to the zone
+    - name: Adding more servers - Follower - initial check of the zone
       when: inventory_hostname == opennebula_ha_leader
+      command:     "onezone show 0"
+      become:      yes
+      become_user: oneadmin
+      register:    onezone_show_0_check_initial_follower
+
+    - name: Adding more servers - Leader - Add the server itself to the zone
+      when: inventory_hostname == opennebula_ha_leader and hostvars[opennebula_ha_follower]['ansible_'+opennebula_ha_interface_name]['ipv4']['address'] not in onezone_show_0_check_initial_follower.stdout
       command:     "onezone server-add 0 --name {{ opennebula_ha_follower }} --rpc http://{{ hostvars[opennebula_ha_follower]['ansible_'+opennebula_ha_interface_name]['ipv4']['address'] }}:2633/RPC2"
       become:      yes
       become_user: oneadmin
@@ -81,7 +89,7 @@
       when: inventory_hostname == opennebula_ha_follower
       lineinfile:
         path:   /etc/one/oned.conf
-        regexp: '^(\s+)SERVER_ID(\s+)=(\s+)-1,'
+        regexp: '^(\s+)SERVER_ID(\s+)=(\s+).*,'
         line:   "SERVER_ID = {{ groups['one'].index(inventory_hostname) }},  # MODIFIED BY ANSIBLE"
 
     - name: Adding more servers - Follower - Enable the RAFT Hooks in /etc/one/oned.conf - RAFT_LEADER_HOOK
@@ -119,7 +127,7 @@
       with_items:
         - opennebula
 
-    - name: Adding more servers - Follower - check the floating IP
+    - name: Adding more servers - Follower - check the floating IP - always run (non-idempotent)
       when: inventory_hostname == opennebula_ha_follower
       uri:
         url:         "http://{{ opennebula_ha_floating_ip }}:2633/RPC2"
@@ -129,12 +137,11 @@
       register: check_floating_IP
       until: check_floating_IP.status == 405
 
-#    - name: Adding more servers - Follower - check the floating IP
-#      when: inventory_hostname == opennebula_ha_follower
-#      wait_for:
-#        host:    "{{ opennebula_ha_floating_ip }}"
-#        port:    2633
-#        timeout: 5
+    - name: Adding more servers - Follower - check the floating IP
+      wait_for:
+        host:    "{{ opennebula_ha_floating_ip }}"
+        port:    2633
+        timeout: 5
 
     - name: Adding more servers - Leader - check the zone for follower
       when: inventory_hostname == opennebula_ha_leader

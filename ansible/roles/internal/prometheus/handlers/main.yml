@@ -1,0 +1,8 @@
+---
+- name: "restart prometheus service"
+  become: yes
+  systemd:
+    name:          "{{ prometheus_package_name }}"
+    enabled:       yes
+    daemon-reload: yes
+    state:         restarted

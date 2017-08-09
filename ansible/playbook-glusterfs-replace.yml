@@ -65,7 +65,7 @@
   tasks:
     - name: get the original peer UUID of the server to be replaced
       when: inventory_hostname == gluster_server_node
-      shell:    "grep glusterfs-{{ gluster_replace_node }} -r /var/lib/glusterd/peers | cut -d'/' -f6 | cut -d: -f1"
+      shell:    "grep glusterfs-{{ gluster_replace_node }} -r /var/lib/glusterd/peers | cut -d'/' -f6 | cut -d: -f1 | tr -d ' '"
       register: get_gluster_replace_uuid
 
     - name: "set fact the original peer UUID {{ gluster_replace_uuid }} of the server to be replaced"
@@ -119,7 +119,7 @@
 
     - name: "get the original volume ID of {{ gluster_volume_name }}"
       when: inventory_hostname == gluster_server_node
-      shell:    "getfattr -n trusted.glusterfs.volume-id /data/glusterfs/{{ gluster_volume_name }}/brick1/brick 2>/dev/null | grep volume-id | cut -d= -f2-"
+      shell:    "getfattr -n trusted.glusterfs.volume-id /data/glusterfs/{{ gluster_volume_name }}/brick1/brick 2>/dev/null | grep volume-id | cut -d= -f2- | tr -d ' '"
       register: get_gluster_volume_id
 
     - name: "set fact the original volume ID {{ gluster_volume_id }} of {{ gluster_volume_name }} on the server to be replaced"

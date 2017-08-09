@@ -72,9 +72,9 @@
         state: directory
         mode:  0755
 
-#    - name: "restrict access to the glusterfs volume {{ gluster_volume_name }} to the clients: hostname, fqdn, gluster-fqdn"
-#      command: "gluster volume set {{ gluster_volume_name }} auth.allow ,{{ groups['one'] | join(',') | regex_replace('\\.mydomain', '') }},{{ groups['one'] | join(',') }},{{ groups['one'] | join(',') | regex_replace('one', 'glusterfs-one') }}"
-#      run_once: true
+    - name: "restrict access to the glusterfs volume {{ gluster_volume_name }} to {{ gluster_auth_allow }} - always run (non-idempotent)"
+      command: "gluster volume set {{ gluster_volume_name }} auth.allow {{ gluster_auth_allow }}"
+      run_once: true
 
     - name: mount the "{{ gluster_volume_name }}" opennebula datastore
       mount:
