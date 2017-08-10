@@ -86,7 +86,7 @@ Vagrant.configure(2) do |config|
               p.memory = 256
             else
               p.cpus = 2
-              p.memory = 1152
+              p.memory = 1536  # 768 used by windows VM
             end
             p.nested = true
             # https://github.com/vagrant-libvirt/vagrant-libvirt: management_network_address defaults to 192.168.121.0/24
@@ -98,7 +98,7 @@ Vagrant.configure(2) do |config|
             # https://github.com/vagrant-libvirt/vagrant-libvirt/issues/289
             p.default_prefix = ''
             if group == 'one'
-              p.storage :file, :size => '20G', :path => host + '_sdb.img', :allow_existing => false, :shareable => false, :type => 'raw'
+              p.storage :file, :size => '25G', :path => host + '_sdb.img', :allow_existing => false, :shareable => false, :type => 'raw'
             end
           end
           # configure additional network interfaces (eth0 is used by Vagrant for management)

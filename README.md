@@ -12,12 +12,12 @@ are used to configure `glusterfs` and `opennebula`, and `prometheus` is used for
 The `ansible` modules should be usable also on a physical host infrastructure providing the `nodes`
 are resolving in DNS, contain a bridge network interface, and a block device to be used for `glusterfs`.
 
-The `vagrant` test setup requires 1GB RAM per `node` and 20GB of additional storage space per `node` on the `vagrant` host under `/var/lib/libvirt/images`.
+The `vagrant` test setup requires 1.5GB RAM per `node` and 25GB of additional storage space per `node` on the `vagrant` host under `/var/lib/libvirt/images`.
 The Raft consensus algorithm used by `opennebula` requires at least 3 `nodes`.
 
 Tested on:
 
-- Ubuntu 16.04 x86_64, Vagrant 1.9.5
+- Ubuntu 16.04 x86_64, Vagrant 1.9.7
 
 
 ----------------------
@@ -121,9 +121,11 @@ After the VMs are up, `ansible` playbooks are used to configure `gluster` and `o
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-glusterfs-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-glusterfs-setup.yml" || :
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-glusterfs-setup.yml" || :
 
 - configure 3 independent `openenbula` frontends. They will later used to form the highly-available (HA) cluster.
 
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-setup.yml" || :
 
@@ -131,22 +133,26 @@ After the VMs are up, `ansible` playbooks are used to configure `gluster` and `o
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-node-setup.yml" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-node-setup.yml" || :
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-node-setup.yml" || :
 
 - configure HA frontend leader:
 
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-leader-setup.yml --extra-vars 'opennebula_ha_leader=one1.mydomain'" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-leader-setup.yml --extra-vars 'opennebula_ha_leader=one1.mydomain'" || :
 
 - configure the HA frontend followers:
 
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-follower-setup.yml --extra-vars 'opennebula_ha_follower=one2.mydomain'" || :
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-follower-setup.yml --extra-vars 'opennebula_ha_follower=one2.mydomain'" || :
+        $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-follower-setup.yml --extra-vars 'opennebula_ha_follower=one3.mydomain'" || :
         $ vagrant ssh mgt1.mydomain -c "ansible-playbook -i /vagrant/ansible/hosts.yml /vagrant/ansible/playbook-one-frontend-ha-follower-setup.yml --extra-vars 'opennebula_ha_follower=one3.mydomain'" || :
 
-The recent documentation of `opennebula` http://docs.opennebula.org/5.4/operation/ focuses on actions performed using the sunstone web-interface. sunstone port forwared by `vagrant` from the guest one1.myadmin:9869 (the current frontend leader) to the `vagrant` host port 19869, or on `apache` reverse-proxy at port 10080, is accessible with credentials (defined in Vagrantfile) `onadmin`/`password`:
+The recent documentation of `opennebula` http://docs.opennebula.org/5.4/operation/ focuses on actions performed using the sunstone web-interface. sunstone port forwared is by `vagrant` from the guest one1.myadmin:9869 (the current frontend leader) to the `vagrant` host port 19869, or on `apache` reverse-proxy at port 10080, and sunstone is accessible with credentials (defined in Vagrantfile) `onadmin`/`password`:
 
         $ firefox 127.0.0.1:19869
         $ firefox 127.0.0.1:10080
 
-The older `opennebula` documentation http://docs.opennebula.org/4.14/design_and_installation/quick_starts/qs_centos7_kvm.html contains instructions how to start a VMs on the command line. All steps are to be performed on the frontend leader (currently one1.mydomain), and will be replicated over to `sqlite` instances on the frontend followers.
+The older `opennebula` documentation http://docs.opennebula.org/4.14/design_and_installation/quick_starts/qs_centos7_kvm.html contains instructions how to start VMs on the command line. All steps are to be performed on the frontend leader (currently one1.mydomain), and will be replicated over to `sqlite` instances on the frontend followers.
 
 - add the `opennebula` `nodes` to the cluster:
 
@@ -290,12 +296,95 @@ Resume the centos7 VM instance and verify it is accesible:
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list | grep one3'"
         $ vagrant ssh one1.mydomain -c "sshpass -p password ssh -o StrictHostKeyChecking=no root@192.168.123.100 '/sbin/ifconfig'"
 
+Prepare a contextualized Windows image. The process consists of installing a VM from a Windows ISO file,
+and contextualizing it for `opennebula`. The general process of contextualization is described at http://docs.opennebula.org/5.4/operation/vm_setup/kvm.html
+and specific Windows instructions are available at https://github.com/CERIT-SC/opennebula-build-image/wiki/Windows-(trial)-images
+and http://bart.vanhauwaert.org/hints/installing-win10-on-KVM.html
+
+- rsync the Windows ISO into one of the `opennebula` nodes:
+
+        $ rsync -e "ssh -i .vagrant/machines/one1.mydomain/libvirt/private_key" -av ~/windows.iso vagrant@`vagrant ssh-config one1.mydomain | grep HostName | awk '{print $2}'`:/vagrant
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'chmod go+r /vagrant/windows.iso'"
+
+- download https://fedoraproject.org/wiki/Windows_Virtio_Drivers ISO:
+
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'cd /vagrant&& wget https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win.iso'"
+
+- download the Windows contextualization package (https://opennebula.org/new-contextualization-packages-2/):
+
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'cd /vagrant&& wget https://github.com/OpenNebula/addon-context-windows/releases/download/v5.4.0/one-context-5.4.0.msi'"
+
+- mkisofs of the Windows contextualization package toghether with autounattend.xml into an ISO file:
+
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'mkdir /vagrant/autounattend'"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'cp -p /vagrant/one-context-*.msi /vagrant/autounattend'"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'cp -p /vagrant/autounattend.xml /vagrant/autounattend'"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'cd /vagrant&& mkisofs -o autounattend.iso -J -r autounattend'"
+
+- create an empty qcow2 image and, and unattended install of Windows with `virt-install`:
+    
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'yum -y install virt-install'"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'qemu-img create -f qcow2 /var/lib/libvirt/images/windows.qcow2 12G'"  # use at least 40G for production
+        $ vagrant ssh one1.mydomain -c "sudo su - -c \"sed -i 's/oneadmin/root/' /etc/libvirt/qemu.conf\""  # opennebula has modified /etc/libvirt/qemu.conf to allow oneadmin user only https://dev.opennebula.org/issues/1555
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'systemctl restart libvirtd"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'sh /vagrant/windows.sh'"
+        $ sleep 600
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'virsh start windows'"
+        $ sleep 300
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'virsh change-media windows hda --eject --config'"  # eject cdrom
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'virsh change-media windows hdb --eject --config'"  # eject cdrom
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'virsh change-media windows hdc --eject --config'"  # eject cdrom
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'virsh shutdown windows'"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c \"sed -i 's/root/oneadmin/' /etc/libvirt/qemu.conf\""
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'systemctl restart libvirtd"
+
+- use `virt-viewer` to diagnose Windows installation issues, requires X on the machine where the Windows VM is running:
+
+        $ vagrant ssh one1.mydomain -c "sudo su - -c \"yum -y install 'X Window System'\""
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'yum -y install gdm crudini virt-viewer'"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'systemctl set-default graphical.target'"
+        $ vagrant ssh one1.mydomain -c "sudo su - -c \"crudini --set /etc/ssh/sshd_config '' AddressFamily inet\""  # https://jason-antonacci.blogspot.dk/2012/06/x11-forwarding-issue-solved.html
+        $ vagrant reload one1.mydomain
+        $ vagrant ssh one1.mydomain -c "sudo su - -c 'systemctl status display-manager'"
+
+- import the contextualized Windows image into `opennebula`:
+
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'oneimage create --name windows --path /var/lib/libvirt/images/windows.qcow2 --datastore default --prefix vd --driver qcow2'"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'oneimage list'"
+
+  It takes some time to download this image, but one can proceed with further `opennebula` commands.
+
+- create a VM template using that image:
+
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate list'"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate create --name windows --cpu 1 --vcpu 1 --memory 768 --arch x86_64 --disk windows --nic private --vnc --ssh --net_context'"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate list'"
+
+- if booting Windows hangs on the Windows image, update the template with "<cpu mode=host-passthrough></cpu>" (see https://forum.opennebula.org/t/how-to-create-windows-vm):
+
+        $ vagrant ssh one1.mydomain -c 'echo RAW = [ DATA = "\"<cpu mode=host-passthrough></cpu>\"", TYPE = kvm ] > /tmp/raw.one'  # save as vagrant to bypass quoting nightmare
+        $ vagrant ssh one1.mydomain -c "sed -i \"s/host-passthrough/'host-passthrough'/\" /tmp/raw.one"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'cp -p /tmp/raw.one .'"
+        $ vagrant ssh one1.mydomain -c "rm -f /tmp/raw.one"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate update windows -a raw.one'"
+
+- update the template context with the Administrator password (see https://docs.opennebula.org/5.4/operation/vm_setup/kvm.html). Specify `NETWORK=YES` (see https://docs.opennebula.org/5.4/operation/network_management/manage_vnets.html), otherwise opennebula won't configure network on windows VM (only lo interface will be present):
+
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'echo CONTEXT = [ USERNAME = Administrator, PASSWORD = password, NETWORK = YES  ] > context.one'"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate update windows -a context.one'"
+
+- start the VM using this template:
+
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list'"
+        $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate instantiate windows'"
+
 
 ------------
 Dependencies
 ------------
 
 https://github.com/vagrant-landrush/landrush
+
 https://github.com/vagrant-libvirt/vagrant-libvirt
 
 

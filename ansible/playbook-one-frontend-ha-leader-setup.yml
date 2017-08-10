@@ -58,7 +58,7 @@
       when: inventory_hostname == opennebula_ha_leader
       lineinfile:
         path:   /etc/one/oned.conf
-        regexp: '^(\s+)SERVER_ID(\s+)=(\s+)-1,'
+        regexp: '^(\s)*SERVER_ID(\s)+=(\s)+.*,.*'  # must match both original and modified, otherwise ansible will add the line every time
         line:   "SERVER_ID = {{ groups['one'].index(inventory_hostname) }},  # MODIFIED BY ANSIBLE"
 
     - name: Configuration of the initial leader - Leader - Enable the RAFT Hooks in /etc/one/oned.conf - RAFT_LEADER_HOOK
