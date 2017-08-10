@@ -314,14 +314,14 @@ and http://bart.vanhauwaert.org/hints/installing-win10-on-KVM.html
 
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'cd /vagrant&& wget https://github.com/OpenNebula/addon-context-windows/releases/download/v5.4.0/one-context-5.4.0.msi'"
 
-- mkisofs of the Windows contextualization package toghether with autounattend.xml into an ISO file:
+- mkisofs of the Windows contextualization package together with autounattend.xml into an ISO file:
 
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'mkdir /vagrant/autounattend'"
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'cp -p /vagrant/one-context-*.msi /vagrant/autounattend'"
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'cp -p /vagrant/autounattend.xml /vagrant/autounattend'"
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'cd /vagrant&& mkisofs -o autounattend.iso -J -r autounattend'"
 
-- create an empty qcow2 image and, and unattended install of Windows with `virt-install`:
+- create an empty qcow2 image, and unattended install Windows with `virt-install`:
     
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'yum -y install virt-install'"
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'qemu-img create -f qcow2 /var/lib/libvirt/images/windows.qcow2 12G'"  # use at least 40G for production
@@ -338,7 +338,7 @@ and http://bart.vanhauwaert.org/hints/installing-win10-on-KVM.html
         $ vagrant ssh one1.mydomain -c "sudo su - -c \"sed -i 's/root/oneadmin/' /etc/libvirt/qemu.conf\""
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'systemctl restart libvirtd"
 
-- use `virt-viewer` to diagnose Windows installation issues, requires X on the machine where the Windows VM is running:
+- use `virt-viewer` to diagnose Windows installation issues. This requires X on the machine where the Windows VM is running:
 
         $ vagrant ssh one1.mydomain -c "sudo su - -c \"yum -y install 'X Window System'\""
         $ vagrant ssh one1.mydomain -c "sudo su - -c 'yum -y install gdm crudini virt-viewer'"
@@ -352,7 +352,7 @@ and http://bart.vanhauwaert.org/hints/installing-win10-on-KVM.html
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'oneimage create --name windows --path /var/lib/libvirt/images/windows.qcow2 --datastore default --prefix vd --driver qcow2'"
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'oneimage list'"
 
-  It takes some time to download this image, but one can proceed with further `opennebula` commands.
+  It takes some time to import this image, but one can proceed with further `opennebula` commands.
 
 - create a VM template using that image:
 
@@ -360,7 +360,7 @@ and http://bart.vanhauwaert.org/hints/installing-win10-on-KVM.html
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate create --name windows --cpu 1 --vcpu 1 --memory 768 --arch x86_64 --disk windows --nic private --vnc --ssh --net_context'"
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate list'"
 
-- if booting Windows hangs on the Windows image, update the template with "<cpu mode=host-passthrough></cpu>" (see https://forum.opennebula.org/t/how-to-create-windows-vm):
+- if booting Windows hangs on the Windows image, update the template with "\<cpu mode=host-passthrough>\</cpu\>" (see https://forum.opennebula.org/t/how-to-create-windows-vm):
 
         $ vagrant ssh one1.mydomain -c 'echo RAW = [ DATA = "\"<cpu mode=host-passthrough></cpu>\"", TYPE = kvm ] > /tmp/raw.one'  # save as vagrant to bypass quoting nightmare
         $ vagrant ssh one1.mydomain -c "sed -i \"s/host-passthrough/'host-passthrough'/\" /tmp/raw.one"
@@ -373,7 +373,7 @@ and http://bart.vanhauwaert.org/hints/installing-win10-on-KVM.html
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'echo CONTEXT = [ USERNAME = Administrator, PASSWORD = password, NETWORK = YES  ] > context.one'"
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate update windows -a context.one'"
 
-- start the VM using this template:
+- start the VM using this template (it takes a couple of minutes):
 
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list'"
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate instantiate windows'"
