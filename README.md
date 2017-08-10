@@ -360,7 +360,7 @@ and http://bart.vanhauwaert.org/hints/installing-win10-on-KVM.html
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate create --name windows --cpu 1 --vcpu 1 --memory 768 --arch x86_64 --disk windows --nic private --vnc --ssh --net_context'"
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onetemplate list'"
 
-- if booting Windows hangs on the Windows image, update the template with "\<cpu mode=host-passthrough>\</cpu\>" (see https://forum.opennebula.org/t/how-to-create-windows-vm):
+- if booting Windows hangs on the Windows icon, update the template with "\<cpu mode=host-passthrough>\</cpu\>" (see https://forum.opennebula.org/t/how-to-create-windows-vm):
 
         $ vagrant ssh one1.mydomain -c 'echo RAW = [ DATA = "\"<cpu mode=host-passthrough></cpu>\"", TYPE = kvm ] > /tmp/raw.one'  # save as vagrant to bypass quoting nightmare
         $ vagrant ssh one1.mydomain -c "sed -i \"s/host-passthrough/'host-passthrough'/\" /tmp/raw.one"
