@@ -225,6 +225,10 @@ The older `opennebula` documentation http://docs.opennebula.org/4.14/design_and_
         $ sleep 10
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list | grep one2'"
 
+-------
+Test HA
+-------
+
 Test a scenario when one1.mydomain `node` (the current frontend leader) is restarted due to maintenance. After the `node`
 goes down it is expected that `opennebula` Virtual IP will be moved to another `node`, and the `gluster` volume continue to operate
 with only two replicas. After the `node` is brought back `gluster` should recreate the 3 replica volume by synchronizing the updates to the `brick` on one1.mydomain,
@@ -295,6 +299,10 @@ Resume the centos7 VM instance and verify it is accesible:
         $ sleep 30
         $ vagrant ssh one1.mydomain -c "sudo su - oneadmin -c 'onevm list | grep one3'"
         $ vagrant ssh one1.mydomain -c "sshpass -p password ssh -o StrictHostKeyChecking=no root@192.168.123.100 '/sbin/ifconfig'"
+
+------------------------------------
+Prepare contextualized Windows image
+------------------------------------
 
 Prepare a contextualized Windows image. The process consists of installing a VM from a Windows ISO file,
 and contextualizing it for `opennebula`. The general process of contextualization is described at http://docs.opennebula.org/5.4/operation/vm_setup/kvm.html
