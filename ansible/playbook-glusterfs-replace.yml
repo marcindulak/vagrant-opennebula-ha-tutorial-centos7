@@ -7,11 +7,12 @@
   vars:
 
   pre_tasks:
+    # The inode size is set to 512 bytes to accommodate for the extended attributes used by GlusterFS.
     - name: create filesystem on the block device used for glusterfs
-      when: inventory_hostname == gluster_replace_node
       filesystem:
         fstype: xfs
         dev:    "{{ gluster_block_device }}"
+        opts:   -i size=512
 
     - name: create the brick directory
       when: inventory_hostname == gluster_replace_node
